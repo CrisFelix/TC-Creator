@@ -12,18 +12,33 @@ A lightweight, browser-based test case manager. No build step, no server, no dep
 - Full CSV export (respects active filter) and import with upsert support
 - Data persisted in `localStorage` — nothing leaves your browser
 
-## Getting Started
+## Installation & Setup
 
-**Option 1 — Open directly:**
-```
-index.html  →  open in browser
-```
+**Prerequisites:** A modern browser (Chrome, Firefox, Edge, Safari). No Node.js required for Option 1.
 
-**Option 2 — Local server** (if `file://` blocks localStorage):
-```bash
-npx serve .
-# then open http://localhost:3000
-```
+### Option 1 — Open directly (simplest)
+
+1. Clone or download the repository:
+   ```bash
+   git clone https://github.com/CrisFelix/TC-Creator.git
+   cd TC-Creator
+   ```
+2. Open `index.html` in your browser:
+   - **Windows:** double-click `index.html`, or right-click → Open with → your browser
+   - **Mac/Linux:** `open index.html` or drag it into a browser window
+
+### Option 2 — Local server (recommended for Chromium-based browsers)
+
+Some Chromium security policies block `localStorage` under `file://`. If the app loads but test cases don't save, use this instead:
+
+1. Make sure [Node.js](https://nodejs.org) is installed.
+2. Clone the repository and start a local server:
+   ```bash
+   git clone https://github.com/CrisFelix/TC-Creator.git
+   cd TC-Creator
+   npx serve .
+   ```
+3. Open `http://localhost:3000` in your browser.
 
 ## Data Model
 
