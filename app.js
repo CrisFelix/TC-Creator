@@ -82,7 +82,7 @@ const Classifier = (() => {
 
 /* ── CSVExport ───────────────────────────────────────────────── */
 const CSVExport = (() => {
-  const HEADERS = ['ID', 'Title', 'Steps', 'Expected Result', 'Priority', 'Type', 'Status'];
+  const HEADERS = ['ID', 'Title', 'Steps', 'Expected Result', 'Priority', 'Type', 'Status', 'Technology'];
 
   function esc(val) {
     return `"${String(val ?? '').replace(/"/g, '""')}"`;
@@ -102,6 +102,7 @@ const CSVExport = (() => {
       tc.priority ?? '',
       tc.type,
       tc.status,
+      tc.technology ?? '',
     ]);
 
     const csv = [HEADERS, ...rows]
@@ -191,6 +192,8 @@ const CSVImport = (() => {
         case 'automatedmanual':
         case 'automatedormanual':                            map.type           = i; break;
         case 'status':                                       map.status         = i; break;
+        case 'technology':
+        case 'tech':                                         map.technology     = i; break;
       }
     });
     return map;
@@ -261,6 +264,7 @@ const CSVImport = (() => {
           priority:       normalizePriority(get(colMap.priority)),
           type:           normalizeType(get(colMap.type)),
           status:         normalizeStatus(get(colMap.status)),
+          technology:     get(colMap.technology),
           attachments:    [],
           updatedAt:      new Date().toISOString(),
         });
@@ -291,16 +295,19 @@ const UI = (() => {
   const fExpected    = $('f-expected');
   const fStatus      = $('f-status');
   const fPriority    = $('f-priority');
+  const fTechnology  = $('f-technology');
   const suggestMsg   = $('suggest-msg');
   const tbody        = $('tc-tbody');
   const emptyState   = $('empty-state');
   const tcCount      = $('tc-count');
   const search       = $('search');
   const filterType   = $('filter-type');
-  const filterStatus = $('filter-status');
+  const filterStatus     = $('filter-status');
+  const filterTechnology = $('filter-technology');
 
   let sortCol = 'id';
   let sortDir = 'asc';
+  let groupByTech = false;
   let currentAttachments = [];  // { name, type, size, data } objects for the open form
 
   /* ── Helpers ─────────────────────────────────────────────── */
@@ -399,8 +406,10 @@ const UI = (() => {
       c.title.toLowerCase().includes(q) ||
       (c.steps || '').toLowerCase().includes(q)
     );
+    const filterTech = filterTechnology.value;
     if (ft) cases = cases.filter(c => c.type === ft);
     if (fs) cases = cases.filter(c => c.status === fs);
+    if (filterTech) cases = cases.filter(c => (c.technology || '').trim() === filterTech);
 
     cases.sort((a, b) => {
       if (sortCol === 'priority') {
@@ -420,11 +429,56 @@ const UI = (() => {
     return cases;
   }
 
+  function populateTechFilter() {
+    const techs = [...new Set(
+      TCStore.getAll().map(tc => (tc.technology || '').trim()).filter(Boolean)
+    )].sort();
+    const current = filterTechnology.value;
+    filterTechnology.innerHTML = '<option value="">All Technologies</option>' +
+      techs.map(t => `<option value="${attr(t)}"${t === current ? ' selected' : ''}>${esc(t)}</option>`).join('');
+  }
+
+  function renderRow(tc) {
+    const priorityHtml = (tc.priority != null)
+      ? `<span class="priority-badge">${esc(String(tc.priority))}</span>`
+      : '<span class="cell-muted">—</span>';
+
+    const techHtml = (tc.technology && tc.technology.trim())
+      ? `<span class="tech-badge">${esc(tc.technology.trim())}</span>`
+      : '<span class="cell-muted">—</span>';
+
+    const attHtml = (tc.attachments && tc.attachments.length)
+      ? tc.attachments.map((att, i) =>
+          `<a class="attachment-link" data-id="${attr(tc.id)}" data-idx="${i}" href="#">${esc(att.name)}</a>`
+        ).join('')
+      : '<span class="cell-muted">—</span>';
+
+    return `
+      <tr>
+        <td><span class="tc-id">${esc(tc.id)}</span></td>
+        <td><span class="tc-title">${esc(tc.title)}</span></td>
+        <td><span class="tc-expected" title="${attr(tc.expectedResult)}">${esc(expectedPreview(tc.expectedResult))}</span></td>
+        <td>${priorityHtml}</td>
+        <td><span class="badge ${esc(tc.type)}">${esc(tc.type)}</span></td>
+        <td><span class="badge status-${esc(tc.status)}">${esc(tc.status)}</span></td>
+        <td>${techHtml}</td>
+        <td class="attachment-cell">${attHtml}</td>
+        <td>
+          <div class="row-actions">
+            <button class="btn-edit"   data-id="${attr(tc.id)}">Edit</button>
+            <button class="btn-delete" data-id="${attr(tc.id)}">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
   function render() {
     const cases = getFilteredSorted();
     const all   = TCStore.getAll();
 
     tcCount.textContent = `${all.length} case${all.length !== 1 ? 's' : ''}`;
+    populateTechFilter();
 
     if (!cases.length) {
       tbody.innerHTML = '';
@@ -434,35 +488,27 @@ const UI = (() => {
 
     emptyState.classList.add('hidden');
 
-    tbody.innerHTML = cases.map(tc => {
-      const priorityHtml = (tc.priority != null)
-        ? `<span class="priority-badge">${esc(String(tc.priority))}</span>`
-        : '<span class="cell-muted">—</span>';
+    if (groupByTech) {
+      const groups = new Map();
+      cases.forEach(tc => {
+        const key = (tc.technology || '').trim() || '(No Technology)';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(tc);
+      });
 
-      const attHtml = (tc.attachments && tc.attachments.length)
-        ? tc.attachments.map((att, i) =>
-            `<a class="attachment-link" data-id="${attr(tc.id)}" data-idx="${i}" href="#">${esc(att.name)}</a>`
-          ).join('')
-        : '<span class="cell-muted">—</span>';
+      const sortedKeys = [...groups.keys()].sort((a, b) => {
+        if (a === '(No Technology)') return 1;
+        if (b === '(No Technology)') return -1;
+        return a.localeCompare(b);
+      });
 
-      return `
-        <tr>
-          <td><span class="tc-id">${esc(tc.id)}</span></td>
-          <td><span class="tc-title">${esc(tc.title)}</span></td>
-          <td><span class="tc-expected" title="${attr(tc.expectedResult)}">${esc(expectedPreview(tc.expectedResult))}</span></td>
-          <td>${priorityHtml}</td>
-          <td><span class="badge ${esc(tc.type)}">${esc(tc.type)}</span></td>
-          <td><span class="badge status-${esc(tc.status)}">${esc(tc.status)}</span></td>
-          <td class="attachment-cell">${attHtml}</td>
-          <td>
-            <div class="row-actions">
-              <button class="btn-edit"   data-id="${attr(tc.id)}">Edit</button>
-              <button class="btn-delete" data-id="${attr(tc.id)}">Delete</button>
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join('');
+      tbody.innerHTML = sortedKeys.map(key => {
+        const rows = groups.get(key).map(tc => renderRow(tc)).join('');
+        return `<tr class="group-header"><td colspan="9"><span class="group-label">${esc(key)}</span></td></tr>${rows}`;
+      }).join('');
+    } else {
+      tbody.innerHTML = cases.map(tc => renderRow(tc)).join('');
+    }
   }
 
   /* ── Events ──────────────────────────────────────────────── */
@@ -580,6 +626,7 @@ const UI = (() => {
       priority:       isNaN(priorityVal) || priorityVal < 1 ? null : priorityVal,
       type:           getTypeValue(),
       status:         fStatus.value,
+      technology:     fTechnology.value.trim(),
       attachments:    currentAttachments,
       updatedAt:      new Date().toISOString(),
     });
@@ -620,7 +667,8 @@ const UI = (() => {
       fSteps.value     = tc.steps;
       fExpected.value  = tc.expectedResult;
       fStatus.value    = tc.status;
-      fPriority.value  = tc.priority != null ? tc.priority : '';
+      fPriority.value   = tc.priority != null ? tc.priority : '';
+      fTechnology.value = tc.technology || '';
       setTypeValue(tc.type);
       suggestMsg.textContent = '';
       currentAttachments = (tc.attachments || []).slice();
@@ -703,6 +751,15 @@ const UI = (() => {
       const type = imported || overwritten ? 'success' : 'warning';
       showToast(`Import complete — ${parts.join(', ')}.`, type);
     });
+  });
+
+  /* ── Technology filter & group toggle ───────────────────────── */
+  filterTechnology.addEventListener('change', render);
+
+  $('btn-group-tech').addEventListener('click', () => {
+    groupByTech = !groupByTech;
+    $('btn-group-tech').classList.toggle('active', groupByTech);
+    render();
   });
 
   /* ── Initial render ──────────────────────────────────────── */

@@ -555,6 +555,48 @@ th.sort-desc .sort-icon::after { content: ' ▼'; opacity: 1; }
 .toast-warning { background: #92400e; color: #fef3c7; }
 .toast-error   { background: #991b1b; color: #fee2e2; }
 
+/* ── Technology badge (table) ────────────────────────────────── */
+.tech-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+/* ── Group header row ────────────────────────────────────────── */
+tr.group-header td {
+  background: var(--bg);
+  padding: 7px 14px 5px;
+  border-top: 2px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+tr.group-header:first-child td { border-top: none; }
+
+.group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+/* ── Active toggle button ────────────────────────────────────── */
+.btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn.active:hover {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+}
+
 /* ── Utilities ───────────────────────────────────────────────── */
 .hidden { display: none !important; }
 
