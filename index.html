@@ -123,6 +123,20 @@
     </div>
   </div>
 
+  <!-- ─── View modal ────────────────────────────────────────────── -->
+  <div id="view-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="view-title">
+    <div id="view-modal">
+      <div class="modal-header">
+        <div class="view-header-info">
+          <span id="view-tc-id" class="tc-id"></span>
+          <h2 id="view-title"></h2>
+        </div>
+        <button id="btn-view-close" class="btn-icon" aria-label="Close">&times;</button>
+      </div>
+      <div id="view-body" class="view-body"></div>
+    </div>
+  </div>
+
   <!-- ─── Controls bar ───────────────────────────────────────── -->
   <div id="controls">
     <input id="search" type="search" placeholder="&#128269; Search by ID, title, or steps…" />
@@ -158,6 +172,7 @@
           <th data-col="status" class="sortable">Status <span class="sort-icon">&#8597;</span></th>
           <th data-col="technology" class="sortable">Technology <span class="sort-icon">&#8597;</span></th>
           <th>Attachments</th>
+          <th>Details</th>
           <th>Actions</th>
         </tr>
       </thead>

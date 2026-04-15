@@ -383,6 +383,52 @@ const UI = (() => {
     `).join('');
   }
 
+  /* ── View modal ──────────────────────────────────────────────── */
+  const viewOverlay = $('view-overlay');
+
+  function renderStepsList(steps) {
+    if (!steps || !steps.trim()) return '<p class="view-text cell-muted">No steps defined.</p>';
+    const items = steps.split('\n')
+      .map(l => l.trim().replace(/^\d+[\.\)]\s*/, '').replace(/^[-*•]\s*/, ''))
+      .filter(Boolean);
+    if (!items.length) return '<p class="view-text cell-muted">No steps defined.</p>';
+    return '<ol class="view-steps">' + items.map(l => `<li>${esc(l)}</li>`).join('') + '</ol>';
+  }
+
+  function openView(id) {
+    const tc = TCStore.getAll().find(c => c.id === id);
+    if (!tc) return;
+
+    $('view-tc-id').textContent = tc.id;
+    $('view-title').textContent = tc.title;
+
+    const metaBadges = [
+      `<span class="badge ${esc(tc.type)}">${esc(tc.type)}</span>`,
+      `<span class="badge status-${esc(tc.status)}">${esc(tc.status)}</span>`,
+      tc.priority != null ? `<span class="priority-badge">${esc(String(tc.priority))}</span>` : '',
+      (tc.technology && tc.technology.trim()) ? `<span class="tech-badge">${esc(tc.technology.trim())}</span>` : '',
+    ].filter(Boolean).join('');
+
+    $('view-body').innerHTML = `
+      <div class="view-meta">${metaBadges}</div>
+      <div class="view-section">
+        <h3 class="view-section-label">Steps</h3>
+        ${renderStepsList(tc.steps)}
+      </div>
+      <div class="view-section">
+        <h3 class="view-section-label">Expected Result</h3>
+        <p class="view-text">${esc(tc.expectedResult || '—')}</p>
+      </div>
+    `;
+
+    viewOverlay.classList.remove('hidden');
+  }
+
+  function closeView() {
+    viewOverlay.classList.add('hidden');
+    $('view-body').innerHTML = '';
+  }
+
   function expectedPreview(text) {
     const t = (text || '').trim().replace(/\n/g, ' ');
     return t.length > 80 ? t.slice(0, 80) + '…' : t;
@@ -467,6 +513,7 @@ const UI = (() => {
         <td><span class="badge status-${esc(tc.status)}">${esc(tc.status)}</span></td>
         <td>${techHtml}</td>
         <td class="attachment-cell">${attHtml}</td>
+        <td><button class="btn-view" data-id="${attr(tc.id)}">View</button></td>
         <td>
           <div class="row-actions">
             <button class="btn-edit"   data-id="${attr(tc.id)}">Edit</button>
@@ -508,7 +555,7 @@ const UI = (() => {
 
       tbody.innerHTML = sortedKeys.map(key => {
         const rows = groups.get(key).map(tc => renderRow(tc)).join('');
-        return `<tr class="group-header"><td colspan="9"><span class="group-label">${esc(key)}</span></td></tr>${rows}`;
+        return `<tr class="group-header"><td colspan="10"><span class="group-label">${esc(key)}</span></td></tr>${rows}`;
       }).join('');
     } else {
       tbody.innerHTML = cases.map(tc => renderRow(tc)).join('');
@@ -640,10 +687,22 @@ const UI = (() => {
   });
 
   /* ── Table delegation — Edit / Delete / Attachment download ── */
+  $('btn-view-close').addEventListener('click', closeView);
+  viewOverlay.addEventListener('click', e => { if (e.target === viewOverlay) closeView(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !viewOverlay.classList.contains('hidden')) closeView();
+  });
+
   tbody.addEventListener('click', e => {
+    const viewBtn    = e.target.closest('.btn-view');
     const editBtn    = e.target.closest('.btn-edit');
     const deleteBtn  = e.target.closest('.btn-delete');
     const attachLink = e.target.closest('.attachment-link');
+
+    if (viewBtn) {
+      openView(viewBtn.dataset.id);
+      return;
+    }
 
     if (attachLink) {
       e.preventDefault();
