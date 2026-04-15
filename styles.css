@@ -102,6 +102,13 @@ h1 {
 }
 .btn-secondary:hover { background: var(--bg); }
 
+.btn-danger {
+  background: #fef2f2;
+  color: var(--danger);
+  border-color: #fecaca;
+}
+.btn-danger:hover { background: #fee2e2; border-color: var(--danger); }
+
 .btn-ghost {
   background: transparent;
   color: var(--accent);

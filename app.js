@@ -36,6 +36,10 @@ const TCStore = (() => {
     saveAll(getAll().filter(c => c.id !== id));
   }
 
+  function clearAll() {
+    saveAll([]);
+  }
+
   function nextId() {
     const cases = getAll();
     if (!cases.length) return 'TC-001';
@@ -46,7 +50,7 @@ const TCStore = (() => {
     return `TC-${String(max + 1).padStart(3, '0')}`;
   }
 
-  return { getAll, upsert, remove, nextId };
+  return { getAll, upsert, remove, clearAll, nextId };
 })();
 
 /* ── Classifier ──────────────────────────────────────────────── */
@@ -708,6 +712,16 @@ const UI = (() => {
   search.addEventListener('input', render);
   filterType.addEventListener('change', render);
   filterStatus.addEventListener('change', render);
+
+  /* ── Clear all ───────────────────────────────────────────── */
+  $('btn-clear-all').addEventListener('click', () => {
+    const count = TCStore.getAll().length;
+    if (!count) { showToast('There are no test cases to remove.', 'warning'); return; }
+    if (!confirm(`Delete all ${count} test case${count !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+    TCStore.clearAll();
+    render();
+    showToast(`All ${count} test case${count !== 1 ? 's' : ''} deleted.`, 'success');
+  });
 
   /* ── CSV export ──────────────────────────────────────────── */
   $('btn-export').addEventListener('click', () => {
