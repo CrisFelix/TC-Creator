@@ -20,9 +20,9 @@ Single-page app: three files, no dependencies, no framework.
 
 | File | Role |
 |---|---|
-| `index.html` | All markup: header, TC form modal, steps-viewer modal, controls bar, table, classification guide |
+| `index.html` | All markup: header, TC form modal, controls bar, table, classification guide |
 | `styles.css` | CSS custom properties for theming; all layout, badge colours, and modal animations |
-| `app.js` | Four IIFE modules loaded in order at bottom of `<body>` |
+| `app.js` | Five IIFE modules loaded in order at bottom of `<body>` |
 
 ### Module layout in `app.js`
 
@@ -42,12 +42,15 @@ Each test case stored in localStorage is a plain object:
 
 ```js
 {
-  id:             string,   // e.g. "TC-001"
+  id:             string,          // e.g. "TC-001"
   title:          string,
-  steps:          string,   // newline-separated; "1. Step one\n2. Step two"
+  steps:          string,          // newline-separated; "1. Step one\n2. Step two"
   expectedResult: string,
+  priority:       number | null,   // positive integer, null = unset
   type:           "automated" | "manual",
   status:         "Draft" | "Ready" | "Pass" | "Fail" | "Blocked",
+  attachments:    Array<{ name: string, type: string, size: number, data: string }>,
+                                   // data is a base64 data URL; 2 MB per-file limit
   updatedAt:      ISO 8601 string
 }
 ```
@@ -55,7 +58,9 @@ Each test case stored in localStorage is a plain object:
 ### Key behaviours to know
 
 - **Auto-number**: strips existing `1.`/`1)`/`-`/`*` prefixes, renumbers non-empty lines; blank lines preserved but not counted.
-- **CSV export**: steps newlines collapsed to ` | `; UTF-8 BOM prepended for Excel compatibility. Export respects active filter.
-- **CSV import**: robust RFC 4180 parser; maps headers case-insensitively (strips punctuation). Missing ID → auto-generated. Existing ID → overwrite (upsert). Steps ` | ` → restored to newlines.
+- **CSV export**: steps newlines collapsed to ` | `; UTF-8 BOM prepended for Excel compatibility. Export respects active filter. Attachments are not exported to CSV.
+- **CSV import**: robust RFC 4180 parser; maps headers case-insensitively (strips punctuation). Missing ID → auto-generated. Existing ID → overwrite (upsert). Steps ` | ` → restored to newlines. Imported rows receive empty `attachments: []`.
 - **Classifier**: scores title+steps text against two keyword lists; auto-score ≥ manual-score → "automated", else "manual", tie → "automated", zero matches → no suggestion.
-- **Steps viewer**: always renders steps as `<ol>` with CSS counters, stripping any existing numbering from the raw text before display.
+- **Attachments**: stored as base64 data URLs inside the TC object in localStorage. A 2 MB per-file limit is enforced with a toast warning. Downloads are triggered via a synthetic `<a download>` click using event delegation on `tbody`.
+- **Priority sort**: numeric (not lexicographic); null priorities sort last (sentinel `Infinity`).
+- **Expected Result column**: truncated to 80 chars in the table; full text in the `title` attribute tooltip.

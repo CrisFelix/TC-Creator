@@ -57,6 +57,11 @@
             </select>
           </div>
 
+          <div class="form-row half">
+            <label for="f-priority">Priority</label>
+            <input id="f-priority" type="number" min="1" placeholder="e.g. 1" />
+          </div>
+
           <div class="form-row full">
             <label for="f-title">Title / Description <span class="req">*</span></label>
             <input id="f-title" type="text" placeholder="e.g. Verify login with valid credentials" required />
@@ -73,6 +78,15 @@
           <div class="form-row full">
             <label for="f-expected">Expected Result <span class="req">*</span></label>
             <textarea id="f-expected" rows="3" placeholder="User is redirected to the dashboard and sees a welcome message." required></textarea>
+          </div>
+
+          <div class="form-row full">
+            <div class="label-row">
+              <label>Attachments</label>
+              <button type="button" id="btn-add-attachments" class="btn-inline">+ Add Files</button>
+              <input type="file" id="f-attachments-input" multiple style="display:none" />
+            </div>
+            <div id="f-attachments-list" class="attachments-list"></div>
           </div>
 
           <div class="form-row full">
@@ -103,20 +117,6 @@
     </div>
   </div>
 
-  <!-- ─── Steps Viewer ──────────────────────────────────────── -->
-  <div id="steps-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="steps-viewer-title">
-    <div id="steps-modal">
-      <div class="modal-header">
-        <div>
-          <h2 id="steps-viewer-title"></h2>
-          <p id="steps-viewer-subtitle" class="steps-viewer-subtitle"></p>
-        </div>
-        <button id="btn-steps-close" class="btn-icon" aria-label="Close">&times;</button>
-      </div>
-      <div id="steps-viewer-body"></div>
-    </div>
-  </div>
-
   <!-- ─── Controls bar ───────────────────────────────────────── -->
   <div id="controls">
     <input id="search" type="search" placeholder="&#128269; Search by ID, title, or steps…" />
@@ -142,9 +142,11 @@
         <tr>
           <th data-col="id" class="sortable">ID <span class="sort-icon">&#8597;</span></th>
           <th data-col="title" class="sortable">Title / Description <span class="sort-icon">&#8597;</span></th>
-          <th>Steps (preview)</th>
+          <th>Expected Result</th>
+          <th data-col="priority" class="sortable">Priority <span class="sort-icon">&#8597;</span></th>
           <th data-col="type" class="sortable">Type <span class="sort-icon">&#8597;</span></th>
           <th data-col="status" class="sortable">Status <span class="sort-icon">&#8597;</span></th>
+          <th>Attachments</th>
           <th>Actions</th>
         </tr>
       </thead>

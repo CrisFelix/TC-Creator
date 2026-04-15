@@ -313,14 +313,50 @@ th.sort-desc .sort-icon::after { content: ' ▼'; opacity: 1; }
 
 .tc-title { font-weight: 500; max-width: 280px; }
 
-.tc-steps-preview {
+.tc-expected {
   color: var(--text-muted);
-  max-width: 220px;
+  max-width: 240px;
+  display: block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;
 }
+
+.cell-muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ── Priority badge ───────────────────────────────────────────── */
+.priority-badge {
+  display: inline-block;
+  min-width: 28px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  background: #e0e7ff;
+  color: #3730a3;
+  white-space: nowrap;
+}
+
+/* ── Attachment cell (table) ──────────────────────────────────── */
+.attachment-cell { max-width: 180px; }
+
+.attachment-link {
+  display: block;
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  line-height: 1.8;
+}
+.attachment-link:hover { text-decoration: underline; }
 
 .row-actions { display: flex; gap: 6px; white-space: nowrap; }
 
@@ -438,111 +474,61 @@ th.sort-desc .sort-icon::after { content: ' ▼'; opacity: 1; }
 }
 .btn-inline:hover { background: #dbeafe; }
 
-/* ── Steps viewer modal ──────────────────────────────────────── */
-#steps-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.4);
+/* ── Attachments (form) ──────────────────────────────────────── */
+.attachments-list {
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  z-index: 500;
-  padding: 40px 16px;
-  overflow-y: auto;
+  flex-direction: column;
+  gap: 4px;
 }
 
-#steps-modal {
-  background: var(--surface);
-  border-radius: 12px;
-  width: 100%;
-  max-width: 560px;
-  box-shadow: var(--shadow-lg);
-  animation: slide-in .18s ease-out;
-  overflow: hidden;
-}
-
-.steps-viewer-subtitle {
-  display: block;
-  font-size: 13px;
+.no-attachments {
+  font-size: 12px;
   color: var(--text-muted);
-  margin-top: 2px;
-  max-width: 440px;
+  font-style: italic;
+  line-height: 20px;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+
+.attachment-name {
+  flex: 1;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.steps-list {
-  list-style: none;
-  counter-reset: step-counter;
-  padding: 20px 24px;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.steps-list li {
-  counter-increment: step-counter;
-  display: flex;
-  gap: 12px;
-  font-size: 13.5px;
-  line-height: 1.55;
-}
-
-.steps-list li::before {
-  content: counter(step-counter);
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  background: var(--accent);
-  color: #fff;
+.attachment-size {
   font-size: 11px;
-  font-weight: 700;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 1px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
-.steps-list li.empty-step::before { background: var(--border); color: var(--text-muted); }
-.steps-list li.empty-step { color: var(--text-muted); font-style: italic; }
-
-.steps-expected {
-  margin: 0 24px 24px;
-  padding: 14px 16px;
-  background: var(--bg);
-  border-radius: var(--radius);
-  border-left: 3px solid var(--accent);
-}
-
-.steps-expected-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .5px;
-  color: var(--accent);
-  margin-bottom: 6px;
-}
-
-.steps-expected p {
-  font-size: 13px;
-  color: var(--text);
-  line-height: 1.55;
-}
-
-/* Steps button in table */
-.btn-steps {
-  padding: 4px 10px;
-  font-size: 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
+.btn-remove-attachment {
+  background: none;
+  border: none;
+  color: var(--text-muted);
   cursor: pointer;
-  background: var(--surface);
-  transition: background .12s;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
-.btn-steps:hover { background: #eff6ff; border-color: var(--accent); color: var(--accent); }
+.btn-remove-attachment:hover { background: #fee2e2; color: var(--danger); }
 
 /* ── Toast ───────────────────────────────────────────────────── */
 #toast {

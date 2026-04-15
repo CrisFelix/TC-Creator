@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
    TC Creator — app.js
-   Modules: TCStore | Classifier | CSVExport | UI
+   Modules: TCStore | Classifier | CSVExport | CSVImport | UI
    ═══════════════════════════════════════════════════════════════ */
 
 'use strict';
@@ -51,21 +51,6 @@ const TCStore = (() => {
 
 /* ── Classifier ──────────────────────────────────────────────── */
 const Classifier = (() => {
-  /*
-   * Classification rules
-   * ─────────────────────────────────────────────────────────────
-   * AUTOMATED if the test case:
-   *   • runs repeatedly (regression, smoke, CI)
-   *   • has deterministic, binary pass/fail criteria
-   *   • tests an API endpoint, calculates a value, or validates a field
-   *   • is data-driven or parameterised
-   *
-   * MANUAL if the test case:
-   *   • requires human perception or judgement (visual, UX, feel)
-   *   • is exploratory or ad-hoc
-   *   • involves physical hardware or external devices
-   *   • has a subjective or ambiguous outcome
-   */
   const AUTO_KEYWORDS = [
     'regression', 'smoke', 'integration', 'unit', 'api', 'endpoint',
     'login', 'logout', 'validate', 'verify', 'calculate', 'submit',
@@ -85,7 +70,7 @@ const Classifier = (() => {
 
   function suggest(title, steps) {
     const text = `${title} ${steps}`.toLowerCase();
-    const autoScore  = AUTO_KEYWORDS.filter(k => text.includes(k)).length;
+    const autoScore   = AUTO_KEYWORDS.filter(k => text.includes(k)).length;
     const manualScore = MANUAL_KEYWORDS.filter(k => text.includes(k)).length;
 
     if (autoScore === 0 && manualScore === 0) return null;
@@ -97,10 +82,9 @@ const Classifier = (() => {
 
 /* ── CSVExport ───────────────────────────────────────────────── */
 const CSVExport = (() => {
-  const HEADERS = ['ID', 'Title', 'Steps', 'Expected Result', 'Type', 'Status'];
+  const HEADERS = ['ID', 'Title', 'Steps', 'Expected Result', 'Priority', 'Type', 'Status'];
 
   function esc(val) {
-    // RFC 4180: wrap in double-quotes, escape internal quotes by doubling
     return `"${String(val ?? '').replace(/"/g, '""')}"`;
   }
 
@@ -115,6 +99,7 @@ const CSVExport = (() => {
       tc.title,
       (tc.steps || '').replace(/\n/g, ' | '),
       tc.expectedResult,
+      tc.priority ?? '',
       tc.type,
       tc.status,
     ]);
@@ -142,7 +127,7 @@ const CSVImport = (() => {
 
   /* RFC 4180 parser — handles quoted fields, embedded commas, doubled quotes */
   function parseCSV(raw) {
-    const text = raw.replace(/^\uFEFF/, ''); // strip BOM
+    const text = raw.replace(/^\uFEFF/, '');
     const records = [];
     let i = 0;
     const n = text.length;
@@ -154,21 +139,19 @@ const CSVImport = (() => {
         let field = '';
 
         if (text[i] === '"') {
-          // quoted field
           i++;
           while (i < n) {
             if (text[i] === '"') {
               if (i + 1 < n && text[i + 1] === '"') {
-                field += '"'; i += 2;           // escaped quote
+                field += '"'; i += 2;
               } else {
-                i++; break;                     // closing quote
+                i++; break;
               }
             } else {
               field += text[i++];
             }
           }
         } else {
-          // unquoted field — read until comma or line ending
           while (i < n && text[i] !== ',' && text[i] !== '\r' && text[i] !== '\n') {
             field += text[i++];
           }
@@ -176,11 +159,10 @@ const CSVImport = (() => {
         }
 
         record.push(field);
-        if (i < n && text[i] === ',') { i++; } // next field
-        else { break; }                         // end of record
+        if (i < n && text[i] === ',') { i++; }
+        else { break; }
       }
 
-      // consume line ending
       if (i < n && text[i] === '\r') i++;
       if (i < n && text[i] === '\n') i++;
 
@@ -191,10 +173,6 @@ const CSVImport = (() => {
     return records;
   }
 
-  /*
-   * Map header names (case-insensitive, punctuation-stripped) to field keys.
-   * Accepts both our own export format and common variations.
-   */
   function mapHeaders(headers) {
     const map = {};
     const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -208,6 +186,7 @@ const CSVImport = (() => {
         case 'steps':                                        map.steps          = i; break;
         case 'expectedresult':
         case 'expected':                                     map.expectedResult = i; break;
+        case 'priority':                                     map.priority       = i; break;
         case 'type':
         case 'automatedmanual':
         case 'automatedormanual':                            map.type           = i; break;
@@ -228,9 +207,13 @@ const CSVImport = (() => {
     return match || 'Draft';
   }
 
-  /* Steps were exported with newlines collapsed to " | " — restore them */
   function normalizeSteps(val) {
     return (val || '').replace(/ \| /g, '\n');
+  }
+
+  function normalizePriority(val) {
+    const n = parseInt(val, 10);
+    return isNaN(n) || n < 1 ? null : n;
   }
 
   function importFile(file, onDone) {
@@ -255,11 +238,11 @@ const CSVImport = (() => {
 
       let imported = 0, overwritten = 0, skipped = 0;
 
-      records.slice(1).forEach((row, rowIdx) => {
+      records.slice(1).forEach(row => {
         const get = idx => (idx !== undefined ? (row[idx] || '').trim() : '');
 
         const title = get(colMap.title);
-        if (!title) { skipped++; return; }  // title is the only hard requirement
+        if (!title) { skipped++; return; }
 
         const existingIds = TCStore.getAll().map(c => c.id);
         let id = get(colMap.id);
@@ -267,19 +250,18 @@ const CSVImport = (() => {
         const isDuplicate = id && existingIds.includes(id);
 
         if (!id) {
-          // no ID in CSV — auto-generate a fresh one
           id = TCStore.nextId();
         }
-
-        const isNew = !existingIds.includes(id);
 
         TCStore.upsert({
           id,
           title,
           steps:          normalizeSteps(get(colMap.steps)),
           expectedResult: get(colMap.expectedResult),
+          priority:       normalizePriority(get(colMap.priority)),
           type:           normalizeType(get(colMap.type)),
           status:         normalizeStatus(get(colMap.status)),
+          attachments:    [],
           updatedAt:      new Date().toISOString(),
         });
 
@@ -297,28 +279,29 @@ const CSVImport = (() => {
 
 /* ── UI ──────────────────────────────────────────────────────── */
 const UI = (() => {
-  /* DOM refs */
   const $ = id => document.getElementById(id);
 
-  const overlay    = $('modal-overlay');
-  const modalTitle = $('modal-title');
-  const form       = $('tc-form');
-  const editingId  = $('f-editing-id');
-  const fId        = $('f-id');
-  const fTitle     = $('f-title');
-  const fSteps     = $('f-steps');
-  const fExpected  = $('f-expected');
-  const fStatus    = $('f-status');
-  const suggestMsg = $('suggest-msg');
-  const tbody      = $('tc-tbody');
-  const emptyState = $('empty-state');
-  const tcCount    = $('tc-count');
-  const search     = $('search');
-  const filterType = $('filter-type');
+  const overlay      = $('modal-overlay');
+  const modalTitle   = $('modal-title');
+  const form         = $('tc-form');
+  const editingId    = $('f-editing-id');
+  const fId          = $('f-id');
+  const fTitle       = $('f-title');
+  const fSteps       = $('f-steps');
+  const fExpected    = $('f-expected');
+  const fStatus      = $('f-status');
+  const fPriority    = $('f-priority');
+  const suggestMsg   = $('suggest-msg');
+  const tbody        = $('tc-tbody');
+  const emptyState   = $('empty-state');
+  const tcCount      = $('tc-count');
+  const search       = $('search');
+  const filterType   = $('filter-type');
   const filterStatus = $('filter-status');
 
   let sortCol = 'id';
   let sortDir = 'asc';
+  let currentAttachments = [];  // { name, type, size, data } objects for the open form
 
   /* ── Helpers ─────────────────────────────────────────────── */
   function getTypeValue() {
@@ -342,6 +325,8 @@ const UI = (() => {
     form.reset();
     editingId.value = '';
     suggestMsg.textContent = '';
+    currentAttachments = [];
+    renderAttachmentsList();
     clearErrors();
   }
 
@@ -353,8 +338,8 @@ const UI = (() => {
     clearErrors();
     let ok = true;
 
-    if (!fTitle.value.trim()) { fTitle.classList.add('error'); ok = false; }
-    if (!fSteps.value.trim()) { fSteps.classList.add('error'); ok = false; }
+    if (!fTitle.value.trim())    { fTitle.classList.add('error');    ok = false; }
+    if (!fSteps.value.trim())    { fSteps.classList.add('error');    ok = false; }
     if (!fExpected.value.trim()) { fExpected.classList.add('error'); ok = false; }
 
     if (!ok) {
@@ -363,6 +348,44 @@ const UI = (() => {
     }
     return ok;
   }
+
+  function formatSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function renderAttachmentsList() {
+    const list = $('f-attachments-list');
+    if (!list) return;
+    if (!currentAttachments.length) {
+      list.innerHTML = '<span class="no-attachments">No attachments added.</span>';
+      return;
+    }
+    list.innerHTML = currentAttachments.map((att, i) => `
+      <div class="attachment-item">
+        <span class="attachment-name" title="${esc(att.name)}">${esc(att.name)}</span>
+        <span class="attachment-size">${formatSize(att.size)}</span>
+        <button type="button" class="btn-remove-attachment" data-idx="${i}" title="Remove">&times;</button>
+      </div>
+    `).join('');
+  }
+
+  function expectedPreview(text) {
+    const t = (text || '').trim().replace(/\n/g, ' ');
+    return t.length > 80 ? t.slice(0, 80) + '…' : t;
+  }
+
+  /* ── Safe HTML escaping ──────────────────────────────────── */
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  function attr(s) { return esc(s); }
 
   /* ── Render ──────────────────────────────────────────────── */
   function getFilteredSorted() {
@@ -380,6 +403,13 @@ const UI = (() => {
     if (fs) cases = cases.filter(c => c.status === fs);
 
     cases.sort((a, b) => {
+      if (sortCol === 'priority') {
+        const va = (a.priority == null) ? Infinity : Number(a.priority);
+        const vb = (b.priority == null) ? Infinity : Number(b.priority);
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ?  1 : -1;
+        return 0;
+      }
       const va = (a[sortCol] || '').toString().toLowerCase();
       const vb = (b[sortCol] || '').toString().toLowerCase();
       if (va < vb) return sortDir === 'asc' ? -1 : 1;
@@ -390,16 +420,10 @@ const UI = (() => {
     return cases;
   }
 
-  function stepsPreview(steps) {
-    const first = (steps || '').split('\n')[0].trim();
-    return first.length > 55 ? first.slice(0, 55) + '…' : first;
-  }
-
   function render() {
     const cases = getFilteredSorted();
     const all   = TCStore.getAll();
 
-    /* count badge always shows total */
     tcCount.textContent = `${all.length} case${all.length !== 1 ? 's' : ''}`;
 
     if (!cases.length) {
@@ -410,39 +434,44 @@ const UI = (() => {
 
     emptyState.classList.add('hidden');
 
-    tbody.innerHTML = cases.map(tc => `
-      <tr>
-        <td><span class="tc-id">${esc(tc.id)}</span></td>
-        <td><span class="tc-title">${esc(tc.title)}</span></td>
-        <td><span class="tc-steps-preview" title="${attr(tc.steps)}">${esc(stepsPreview(tc.steps))}</span></td>
-        <td><span class="badge ${esc(tc.type)}">${esc(tc.type)}</span></td>
-        <td><span class="badge status-${esc(tc.status)}">${esc(tc.status)}</span></td>
-        <td>
-          <div class="row-actions">
-            <button class="btn-steps"  data-id="${attr(tc.id)}">Steps</button>
-            <button class="btn-edit"   data-id="${attr(tc.id)}">Edit</button>
-            <button class="btn-delete" data-id="${attr(tc.id)}">Delete</button>
-          </div>
-        </td>
-      </tr>
-    `).join('');
-  }
+    tbody.innerHTML = cases.map(tc => {
+      const priorityHtml = (tc.priority != null)
+        ? `<span class="priority-badge">${esc(String(tc.priority))}</span>`
+        : '<span class="cell-muted">—</span>';
 
-  /* Safe HTML escaping */
-  function esc(s) {
-    return String(s ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      const attHtml = (tc.attachments && tc.attachments.length)
+        ? tc.attachments.map((att, i) =>
+            `<a class="attachment-link" data-id="${attr(tc.id)}" data-idx="${i}" href="#">${esc(att.name)}</a>`
+          ).join('')
+        : '<span class="cell-muted">—</span>';
+
+      return `
+        <tr>
+          <td><span class="tc-id">${esc(tc.id)}</span></td>
+          <td><span class="tc-title">${esc(tc.title)}</span></td>
+          <td><span class="tc-expected" title="${attr(tc.expectedResult)}">${esc(expectedPreview(tc.expectedResult))}</span></td>
+          <td>${priorityHtml}</td>
+          <td><span class="badge ${esc(tc.type)}">${esc(tc.type)}</span></td>
+          <td><span class="badge status-${esc(tc.status)}">${esc(tc.status)}</span></td>
+          <td class="attachment-cell">${attHtml}</td>
+          <td>
+            <div class="row-actions">
+              <button class="btn-edit"   data-id="${attr(tc.id)}">Edit</button>
+              <button class="btn-delete" data-id="${attr(tc.id)}">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
   }
-  function attr(s) { return esc(s); }
 
   /* ── Events ──────────────────────────────────────────────── */
   $('btn-new').addEventListener('click', () => {
     editingId.value = '';
     fId.value = TCStore.nextId();
     setTypeValue('manual');
+    currentAttachments = [];
+    renderAttachmentsList();
     openModal('New Test Case');
   });
 
@@ -454,10 +483,7 @@ const UI = (() => {
   });
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      if (!overlay.classList.contains('hidden'))       closeModal();
-      if (!stepsOverlay.classList.contains('hidden'))  closeStepsViewer();
-    }
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
   });
 
   /* ── Auto-number steps ───────────────────────────────────── */
@@ -466,62 +492,56 @@ const UI = (() => {
     let counter = 1;
     const result = lines.map(line => {
       const trimmed = line.trim();
-      if (!trimmed) return '';                              // blank line — preserve, skip numbering
+      if (!trimmed) return '';
       const stripped = trimmed
-        .replace(/^\d+[\.\)]\s*/, '')                      // strip existing "1. " or "1) "
-        .replace(/^[-*•]\s*/, '');                         // strip "- " or "* " bullets
+        .replace(/^\d+[\.\)]\s*/, '')
+        .replace(/^[-*•]\s*/, '');
       return `${counter++}. ${stripped}`;
     });
     fSteps.value = result.join('\n').trim();
     fSteps.focus();
   });
 
-  /* ── Steps viewer ────────────────────────────────────────── */
-  const stepsOverlay = $('steps-overlay');
+  /* ── Attachments (form) ──────────────────────────────────── */
+  const attachmentsInput = $('f-attachments-input');
 
-  function openStepsViewer(id) {
-    const tc = TCStore.getAll().find(c => c.id === id);
-    if (!tc) return;
-
-    $('steps-viewer-title').textContent    = tc.id;
-    $('steps-viewer-subtitle').textContent = tc.title;
-
-    /* Normalize lines: strip any leading numbering/bullets, then re-render as <ol> */
-    const lines = (tc.steps || '')
-      .split('\n')
-      .map(l => l.trim())
-      .filter(l => l)
-      .map(l => l.replace(/^\d+[\.\)]\s*/, '').replace(/^[-*•]\s*/, '').trim())
-      .filter(l => l);
-
-    const listHtml = lines.length
-      ? lines.map(l => `<li>${esc(l)}</li>`).join('')
-      : '<li class="empty-step">No steps recorded.</li>';
-
-    let html = `<ol class="steps-list">${listHtml}</ol>`;
-
-    if (tc.expectedResult) {
-      html += `
-        <div class="steps-expected">
-          <div class="steps-expected-label">Expected Result</div>
-          <p>${esc(tc.expectedResult)}</p>
-        </div>`;
-    }
-
-    $('steps-viewer-body').innerHTML = html;
-    stepsOverlay.classList.remove('hidden');
-    $('btn-steps-close').focus();
-  }
-
-  function closeStepsViewer() {
-    stepsOverlay.classList.add('hidden');
-  }
-
-  $('btn-steps-close').addEventListener('click', closeStepsViewer);
-  stepsOverlay.addEventListener('click', e => {
-    if (e.target === stepsOverlay) closeStepsViewer();
+  $('btn-add-attachments').addEventListener('click', () => {
+    attachmentsInput.click();
   });
 
+  attachmentsInput.addEventListener('change', () => {
+    const files = Array.from(attachmentsInput.files);
+    let pending = files.length;
+    if (!pending) return;
+
+    files.forEach(file => {
+      if (file.size > 2 * 1024 * 1024) {
+        showToast(`"${file.name}" exceeds 2 MB limit and was skipped.`, 'warning');
+        pending--;
+        if (!pending) renderAttachmentsList();
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = ev => {
+        currentAttachments.push({ name: file.name, type: file.type, size: file.size, data: ev.target.result });
+        pending--;
+        if (!pending) renderAttachmentsList();
+      };
+      reader.readAsDataURL(file);
+    });
+
+    attachmentsInput.value = '';
+  });
+
+  $('f-attachments-list').addEventListener('click', e => {
+    const btn = e.target.closest('.btn-remove-attachment');
+    if (!btn) return;
+    const idx = parseInt(btn.dataset.idx, 10);
+    currentAttachments.splice(idx, 1);
+    renderAttachmentsList();
+  });
+
+  /* ── Suggest ─────────────────────────────────────────────── */
   $('btn-suggest').addEventListener('click', () => {
     const suggestion = Classifier.suggest(fTitle.value, fSteps.value);
     if (!suggestion) {
@@ -532,6 +552,7 @@ const UI = (() => {
     suggestMsg.textContent = `Suggested: ${suggestion}`;
   });
 
+  /* ── Form submit ─────────────────────────────────────────── */
   form.addEventListener('submit', e => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -539,7 +560,6 @@ const UI = (() => {
     const isEdit   = !!editingId.value;
     const recordId = isEdit ? editingId.value : fId.value.trim() || TCStore.nextId();
 
-    /* Prevent duplicate IDs when creating a new TC */
     if (!isEdit) {
       const existing = TCStore.getAll().find(c => c.id === recordId);
       if (existing) {
@@ -550,13 +570,17 @@ const UI = (() => {
       }
     }
 
+    const priorityVal = parseInt(fPriority.value, 10);
+
     TCStore.upsert({
       id:             recordId,
       title:          fTitle.value.trim(),
       steps:          fSteps.value.trim(),
       expectedResult: fExpected.value.trim(),
+      priority:       isNaN(priorityVal) || priorityVal < 1 ? null : priorityVal,
       type:           getTypeValue(),
       status:         fStatus.value,
+      attachments:    currentAttachments,
       updatedAt:      new Date().toISOString(),
     });
 
@@ -564,14 +588,25 @@ const UI = (() => {
     render();
   });
 
-  /* Table delegation — Steps / Edit / Delete */
+  /* ── Table delegation — Edit / Delete / Attachment download ── */
   tbody.addEventListener('click', e => {
-    const stepsBtn  = e.target.closest('.btn-steps');
-    const editBtn   = e.target.closest('.btn-edit');
-    const deleteBtn = e.target.closest('.btn-delete');
+    const editBtn    = e.target.closest('.btn-edit');
+    const deleteBtn  = e.target.closest('.btn-delete');
+    const attachLink = e.target.closest('.attachment-link');
 
-    if (stepsBtn) {
-      openStepsViewer(stepsBtn.dataset.id);
+    if (attachLink) {
+      e.preventDefault();
+      const id  = attachLink.dataset.id;
+      const idx = parseInt(attachLink.dataset.idx, 10);
+      const tc  = TCStore.getAll().find(c => c.id === id);
+      if (!tc || !tc.attachments || !tc.attachments[idx]) return;
+      const att = tc.attachments[idx];
+      const a   = document.createElement('a');
+      a.href    = att.data;
+      a.download = att.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     if (editBtn) {
@@ -585,8 +620,11 @@ const UI = (() => {
       fSteps.value     = tc.steps;
       fExpected.value  = tc.expectedResult;
       fStatus.value    = tc.status;
+      fPriority.value  = tc.priority != null ? tc.priority : '';
       setTypeValue(tc.type);
       suggestMsg.textContent = '';
+      currentAttachments = (tc.attachments || []).slice();
+      renderAttachmentsList();
 
       openModal(`Edit — ${tc.id}`);
     }
@@ -600,7 +638,7 @@ const UI = (() => {
     }
   });
 
-  /* Sorting */
+  /* ── Sorting ─────────────────────────────────────────────── */
   document.querySelectorAll('th.sortable').forEach(th => {
     th.addEventListener('click', () => {
       const col = th.dataset.col;
@@ -618,12 +656,12 @@ const UI = (() => {
     });
   });
 
-  /* Search & filter */
+  /* ── Search & filter ─────────────────────────────────────── */
   search.addEventListener('input', render);
   filterType.addEventListener('change', render);
   filterStatus.addEventListener('change', render);
 
-  /* CSV export */
+  /* ── CSV export ──────────────────────────────────────────── */
   $('btn-export').addEventListener('click', () => {
     CSVExport.export(getFilteredSorted());
   });
@@ -635,15 +673,13 @@ const UI = (() => {
   function showToast(msg, type /* 'success' | 'warning' | 'error' */) {
     clearTimeout(toastTimer);
     toast.textContent = msg;
-    toast.className   = `toast-${type}`;   // replaces 'hidden' too
+    toast.className   = `toast-${type}`;
     toastTimer = setTimeout(() => { toast.className = 'hidden'; }, 5000);
   }
 
   /* ── CSV import ──────────────────────────────────────────── */
   const csvFileInput = $('csv-file-input');
 
-  /* clicking the label opens the file picker; reset value so the same
-     file can be re-imported if needed */
   csvFileInput.addEventListener('click', () => { csvFileInput.value = ''; });
 
   csvFileInput.addEventListener('change', () => {
@@ -669,6 +705,7 @@ const UI = (() => {
     });
   });
 
-  /* Initial render */
+  /* ── Initial render ──────────────────────────────────────── */
+  renderAttachmentsList();
   render();
 })();
