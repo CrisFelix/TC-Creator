@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TC Creator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ─── Header ─────────────────────────────────────────────── -->
+  <header>
+    <div class="header-left">
+      <span class="logo">&#9881;</span>
+      <h1>TC Creator</h1>
+      <span id="tc-count" class="tc-count">0 cases</span>
+    </div>
+    <div class="header-actions">
+      <button id="btn-new" class="btn btn-primary">+ New Test Case</button>
+      <label id="btn-import" class="btn btn-secondary" title="Import test cases from a CSV file">
+        &#8593; Import CSV
+        <input type="file" id="csv-file-input" accept=".csv" style="display:none" />
+      </label>
+      <button id="btn-export" class="btn btn-secondary">&#8595; Export CSV</button>
+    </div>
+  </header>
+
+  <!-- ─── Toast ──────────────────────────────────────────────── -->
+  <div id="toast" class="hidden" role="status" aria-live="polite"></div>
+
+  <!-- ─── Modal ──────────────────────────────────────────────── -->
+  <div id="modal-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div id="modal">
+      <div class="modal-header">
+        <h2 id="modal-title">New Test Case</h2>
+        <button id="btn-modal-close" class="btn-icon" aria-label="Close">&times;</button>
+      </div>
+
+      <form id="tc-form" novalidate>
+        <input type="hidden" id="f-editing-id" />
+
+        <div class="form-grid">
+
+          <div class="form-row half">
+            <label for="f-id">Test Case ID</label>
+            <input id="f-id" type="text" placeholder="TC-001" />
+          </div>
+
+          <div class="form-row half">
+            <label for="f-status">Status</label>
+            <select id="f-status">
+              <option value="Draft">Draft</option>
+              <option value="Ready">Ready</option>
+              <option value="Pass">Pass</option>
+              <option value="Fail">Fail</option>
+              <option value="Blocked">Blocked</option>
+            </select>
+          </div>
+
+          <div class="form-row full">
+            <label for="f-title">Title / Description <span class="req">*</span></label>
+            <input id="f-title" type="text" placeholder="e.g. Verify login with valid credentials" required />
+          </div>
+
+          <div class="form-row full">
+            <div class="label-row">
+              <label for="f-steps">Steps <span class="req">*</span></label>
+              <button type="button" id="btn-autonumber" class="btn-inline" title="Number each non-empty line sequentially">&#35; Auto-number</button>
+            </div>
+            <textarea id="f-steps" rows="5" placeholder="1. Navigate to /login&#10;2. Enter valid username and password&#10;3. Click Submit" required></textarea>
+          </div>
+
+          <div class="form-row full">
+            <label for="f-expected">Expected Result <span class="req">*</span></label>
+            <textarea id="f-expected" rows="3" placeholder="User is redirected to the dashboard and sees a welcome message." required></textarea>
+          </div>
+
+          <div class="form-row full">
+            <label>Type <span class="req">*</span></label>
+            <div class="type-row">
+              <label class="radio-label">
+                <input type="radio" name="f-type" value="automated" />
+                <span class="radio-badge automated">Automated</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="f-type" value="manual" checked />
+                <span class="radio-badge manual">Manual</span>
+              </label>
+              <button type="button" id="btn-suggest" class="btn btn-ghost" title="Suggest type based on title and steps">
+                &#9889; Suggest
+              </button>
+              <span id="suggest-msg" class="suggest-msg"></span>
+            </div>
+          </div>
+
+        </div><!-- /.form-grid -->
+
+        <div class="form-actions">
+          <button type="button" id="btn-cancel" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="btn-save" class="btn btn-primary">Save Test Case</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ─── Steps Viewer ──────────────────────────────────────── -->
+  <div id="steps-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="steps-viewer-title">
+    <div id="steps-modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="steps-viewer-title"></h2>
+          <p id="steps-viewer-subtitle" class="steps-viewer-subtitle"></p>
+        </div>
+        <button id="btn-steps-close" class="btn-icon" aria-label="Close">&times;</button>
+      </div>
+      <div id="steps-viewer-body"></div>
+    </div>
+  </div>
+
+  <!-- ─── Controls bar ───────────────────────────────────────── -->
+  <div id="controls">
+    <input id="search" type="search" placeholder="&#128269; Search by ID, title, or steps…" />
+    <select id="filter-type">
+      <option value="">All Types</option>
+      <option value="automated">Automated</option>
+      <option value="manual">Manual</option>
+    </select>
+    <select id="filter-status">
+      <option value="">All Statuses</option>
+      <option value="Draft">Draft</option>
+      <option value="Ready">Ready</option>
+      <option value="Pass">Pass</option>
+      <option value="Fail">Fail</option>
+      <option value="Blocked">Blocked</option>
+    </select>
+  </div>
+
+  <!-- ─── Table ──────────────────────────────────────────────── -->
+  <div id="table-wrapper">
+    <table id="tc-table" aria-label="Test cases">
+      <thead>
+        <tr>
+          <th data-col="id" class="sortable">ID <span class="sort-icon">&#8597;</span></th>
+          <th data-col="title" class="sortable">Title / Description <span class="sort-icon">&#8597;</span></th>
+          <th>Steps (preview)</th>
+          <th data-col="type" class="sortable">Type <span class="sort-icon">&#8597;</span></th>
+          <th data-col="status" class="sortable">Status <span class="sort-icon">&#8597;</span></th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tc-tbody"></tbody>
+    </table>
+
+    <div id="empty-state" class="hidden">
+      <div class="empty-icon">&#128203;</div>
+      <p>No test cases yet.</p>
+      <p>Click <strong>+ New Test Case</strong> to get started.</p>
+    </div>
+  </div>
+
+  <!-- ─── Classification guide ───────────────────────────────── -->
+  <details id="guide">
+    <summary>&#8505; Automation vs Manual — Classification Guide</summary>
+    <div class="guide-content">
+      <div class="guide-col">
+        <h3 class="badge automated">Automated</h3>
+        <ul>
+          <li>Runs repeatedly (regression, CI/CD)</li>
+          <li>Has deterministic, binary pass/fail criteria</li>
+          <li>Data-driven or parameterised</li>
+          <li>API / integration / unit tests</li>
+          <li>Login, form validation, CRUD operations</li>
+          <li>Performance benchmarks &amp; load tests</li>
+        </ul>
+        <p class="example"><strong>Example:</strong> "Verify that POST /api/users returns 201 and the correct JSON body when given valid data."</p>
+      </div>
+      <div class="guide-col">
+        <h3 class="badge manual">Manual</h3>
+        <ul>
+          <li>Requires human judgement or perception</li>
+          <li>UI/UX, visual design, or accessibility review</li>
+          <li>Exploratory or ad-hoc sessions</li>
+          <li>One-time or rarely repeated scenarios</li>
+          <li>Involves physical hardware or external devices</li>
+          <li>Subjective outcome (e.g. "feels intuitive")</li>
+        </ul>
+        <p class="example"><strong>Example:</strong> "Explore the onboarding flow as a first-time user and note any points of confusion."</p>
+      </div>
+    </div>
+  </details>
+
+  <script src="app.js"></script>
+</body>
+</html>
