@@ -84,9 +84,31 @@ const Classifier = (() => {
   return { suggest };
 })();
 
-/* ── CSVExport ───────────────────────────────────────────────── */
+/* ── CSVExport (Azure DevOps format) ─────────────────────────── */
 const CSVExport = (() => {
-  const HEADERS = ['ID', 'Title', 'Steps', 'Expected Result', 'Priority', 'Type', 'Status', 'Technology', 'Test Suite'];
+  // Columns match Azure DevOps Work Items CSV import schema
+  const HEADERS = [
+    'ID',
+    'Work Item Type',
+    'Title',
+    'State',
+    'Priority',
+    'Automation Status',
+    'Area Path',
+    'Tags',
+    'Test Suite',
+    'Steps',
+    'Expected Result',
+  ];
+
+  // TC Creator status → Azure DevOps work item state
+  const STATE_MAP = {
+    Draft:   'Design',
+    Ready:   'Active',
+    Pass:    'Closed',
+    Fail:    'Active',
+    Blocked: 'Active',
+  };
 
   function esc(val) {
     return `"${String(val ?? '').replace(/"/g, '""')}"`;
@@ -100,14 +122,16 @@ const CSVExport = (() => {
 
     const rows = cases.map(tc => [
       tc.id,
+      'Test Case',
       tc.title,
-      (tc.steps || '').replace(/\n/g, ' | '),
-      tc.expectedResult,
+      STATE_MAP[tc.status] || tc.status,
       tc.priority ?? '',
-      tc.type,
-      tc.status,
-      tc.technology ?? '',
-      tc.testSuite ?? '',
+      tc.type === 'automated' ? 'Automated' : 'Not Automated',
+      tc.technology ?? '',           // → Area Path
+      tc.testSuite  ?? '',           // → Tags
+      tc.testSuite  ?? '',           // → Test Suite (explicit column)
+      (tc.steps || '').replace(/\n/g, ' | '),
+      tc.expectedResult ?? '',
     ]);
 
     const csv = [HEADERS, ...rows]
@@ -118,7 +142,7 @@ const CSVExport = (() => {
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = `test_cases_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `test_cases_azdo_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
