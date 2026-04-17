@@ -86,7 +86,7 @@ const Classifier = (() => {
 
 /* ── CSVExport ───────────────────────────────────────────────── */
 const CSVExport = (() => {
-  const HEADERS = ['ID', 'Title', 'Steps', 'Expected Result', 'Priority', 'Type', 'Status', 'Technology'];
+  const HEADERS = ['ID', 'Title', 'Steps', 'Expected Result', 'Priority', 'Type', 'Status', 'Technology', 'Test Suite'];
 
   function esc(val) {
     return `"${String(val ?? '').replace(/"/g, '""')}"`;
@@ -107,6 +107,7 @@ const CSVExport = (() => {
       tc.type,
       tc.status,
       tc.technology ?? '',
+      tc.testSuite ?? '',
     ]);
 
     const csv = [HEADERS, ...rows]
@@ -198,6 +199,8 @@ const CSVImport = (() => {
         case 'status':                                       map.status         = i; break;
         case 'technology':
         case 'tech':                                         map.technology     = i; break;
+        case 'testsuite':
+        case 'suite':                                        map.testSuite      = i; break;
       }
     });
     return map;
@@ -269,6 +272,7 @@ const CSVImport = (() => {
           type:           normalizeType(get(colMap.type)),
           status:         normalizeStatus(get(colMap.status)),
           technology:     get(colMap.technology),
+          testSuite:      get(colMap.testSuite),
           attachments:    [],
           updatedAt:      new Date().toISOString(),
         });
@@ -298,7 +302,7 @@ const UI = (() => {
   const fSteps       = $('f-steps');
   const fExpected    = $('f-expected');
   const fStatus      = $('f-status');
-  const fPriority    = $('f-priority');
+  const fPriority    = $('f-priority');        // hidden input
   const fTechnology  = $('f-technology');
   const suggestMsg   = $('suggest-msg');
   const tbody        = $('tc-tbody');
@@ -306,8 +310,10 @@ const UI = (() => {
   const tcCount      = $('tc-count');
   const search       = $('search');
   const filterType   = $('filter-type');
-  const filterStatus     = $('filter-status');
-  const filterTechnology = $('filter-technology');
+  const filterStatus      = $('filter-status');
+  const filterTechnology  = $('filter-technology');
+  const filterTestSuite   = $('filter-test-suite');
+  const previewOverlay    = $('preview-overlay');
 
   let sortCol = 'id';
   let sortDir = 'asc';
@@ -325,6 +331,19 @@ const UI = (() => {
     if (radio) radio.checked = true;
   }
 
+  /* ── Priority picker helpers ─────────────────────────────── */
+  function getPriorityValue() {
+    const v = parseInt(fPriority.value, 10);
+    return isNaN(v) || v < 1 ? null : v;
+  }
+
+  function setPriorityValue(val) {
+    fPriority.value = val != null ? String(val) : '';
+    document.querySelectorAll('#f-priority-picker .priority-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.val === (val != null ? String(val) : ''));
+    });
+  }
+
   function openModal(title) {
     modalTitle.textContent = title;
     overlay.classList.remove('hidden');
@@ -334,11 +353,42 @@ const UI = (() => {
   function closeModal() {
     overlay.classList.add('hidden');
     form.reset();
+    setPriorityValue(null);
     editingId.value = '';
     suggestMsg.textContent = '';
     currentAttachments = [];
     renderAttachmentsList();
     clearErrors();
+  }
+
+  /* ── Preview modal helpers ───────────────────────────────── */
+  function openPreview(name, data, mimeType) {
+    $('preview-filename').textContent = name;
+    const body = $('preview-body');
+    body.innerHTML = '';
+
+    if (mimeType && mimeType.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = data;
+      img.alt = name;
+      body.appendChild(img);
+    } else if (mimeType === 'application/pdf') {
+      const iframe = document.createElement('iframe');
+      iframe.src = data;
+      iframe.title = name;
+      body.appendChild(iframe);
+    } else {
+      const div = document.createElement('div');
+      div.className = 'preview-no-support';
+      div.innerHTML = `<p>Preview not available for this file type.</p><p class="cell-muted">${esc(name)}</p>`;
+      body.appendChild(div);
+    }
+    previewOverlay.classList.remove('hidden');
+  }
+
+  function closePreview() {
+    previewOverlay.classList.add('hidden');
+    $('preview-body').innerHTML = '';
   }
 
   function clearErrors() {
@@ -378,6 +428,7 @@ const UI = (() => {
       <div class="attachment-item">
         <span class="attachment-name" title="${esc(att.name)}">${esc(att.name)}</span>
         <span class="attachment-size">${formatSize(att.size)}</span>
+        <button type="button" class="btn-preview-att" data-idx="${i}" title="Preview">&#128065;</button>
         <button type="button" class="btn-remove-attachment" data-idx="${i}" title="Remove">&times;</button>
       </div>
     `).join('');
@@ -405,8 +456,9 @@ const UI = (() => {
     const metaBadges = [
       `<span class="badge ${esc(tc.type)}">${esc(tc.type)}</span>`,
       `<span class="badge status-${esc(tc.status)}">${esc(tc.status)}</span>`,
-      tc.priority != null ? `<span class="priority-badge">${esc(String(tc.priority))}</span>` : '',
+      tc.priority != null ? `<span class="priority-badge p${tc.priority}">P${esc(String(tc.priority))}</span>` : '',
       (tc.technology && tc.technology.trim()) ? `<span class="tech-badge">${esc(tc.technology.trim())}</span>` : '',
+      (tc.testSuite  && tc.testSuite.trim())  ? `<span class="suite-badge">${esc(tc.testSuite.trim())}</span>`  : '',
     ].filter(Boolean).join('');
 
     $('view-body').innerHTML = `
@@ -456,10 +508,12 @@ const UI = (() => {
       c.title.toLowerCase().includes(q) ||
       (c.steps || '').toLowerCase().includes(q)
     );
-    const filterTech = filterTechnology.value;
+    const filterTech  = filterTechnology.value;
+    const filterSuite = filterTestSuite.value;
     if (ft) cases = cases.filter(c => c.type === ft);
     if (fs) cases = cases.filter(c => c.status === fs);
-    if (filterTech) cases = cases.filter(c => (c.technology || '').trim() === filterTech);
+    if (filterTech)  cases = cases.filter(c => (c.technology || '').trim() === filterTech);
+    if (filterSuite) cases = cases.filter(c => (c.testSuite  || '').trim() === filterSuite);
 
     cases.sort((a, b) => {
       if (sortCol === 'priority') {
@@ -488,18 +542,35 @@ const UI = (() => {
       techs.map(t => `<option value="${attr(t)}"${t === current ? ' selected' : ''}>${esc(t)}</option>`).join('');
   }
 
+  function populateTestSuiteFilter() {
+    const suites = [...new Set(
+      TCStore.getAll().map(tc => (tc.testSuite || '').trim()).filter(Boolean)
+    )].sort();
+    const current = filterTestSuite.value;
+    filterTestSuite.innerHTML = '<option value="">All Suites</option>' +
+      suites.map(s => `<option value="${attr(s)}"${s === current ? ' selected' : ''}>${esc(s)}</option>`).join('');
+  }
+
   function renderRow(tc) {
-    const priorityHtml = (tc.priority != null)
-      ? `<span class="priority-badge">${esc(String(tc.priority))}</span>`
+    const p = tc.priority;
+    const priorityHtml = (p != null)
+      ? `<span class="priority-badge p${p}">P${esc(String(p))}</span>`
       : '<span class="cell-muted">—</span>';
 
     const techHtml = (tc.technology && tc.technology.trim())
       ? `<span class="tech-badge">${esc(tc.technology.trim())}</span>`
       : '<span class="cell-muted">—</span>';
 
+    const suiteHtml = (tc.testSuite && tc.testSuite.trim())
+      ? `<span class="suite-badge">${esc(tc.testSuite.trim())}</span>`
+      : '<span class="cell-muted">—</span>';
+
     const attHtml = (tc.attachments && tc.attachments.length)
-      ? tc.attachments.map((att, i) =>
-          `<a class="attachment-link" data-id="${attr(tc.id)}" data-idx="${i}" href="#">${esc(att.name)}</a>`
+      ? tc.attachments.map((att, i) => `
+          <div class="att-entry">
+            <button class="btn-att-preview" data-id="${attr(tc.id)}" data-idx="${i}" title="Preview">${esc(att.name)}</button>
+            <button class="btn-att-dl" data-id="${attr(tc.id)}" data-idx="${i}" title="Download">&#8595;</button>
+          </div>`
         ).join('')
       : '<span class="cell-muted">—</span>';
 
@@ -512,6 +583,7 @@ const UI = (() => {
         <td><span class="badge ${esc(tc.type)}">${esc(tc.type)}</span></td>
         <td><span class="badge status-${esc(tc.status)}">${esc(tc.status)}</span></td>
         <td>${techHtml}</td>
+        <td>${suiteHtml}</td>
         <td class="attachment-cell">${attHtml}</td>
         <td><button class="btn-view" data-id="${attr(tc.id)}">View</button></td>
         <td>
@@ -530,6 +602,7 @@ const UI = (() => {
 
     tcCount.textContent = `${all.length} case${all.length !== 1 ? 's' : ''}`;
     populateTechFilter();
+    populateTestSuiteFilter();
 
     if (!cases.length) {
       tbody.innerHTML = '';
@@ -555,7 +628,7 @@ const UI = (() => {
 
       tbody.innerHTML = sortedKeys.map(key => {
         const rows = groups.get(key).map(tc => renderRow(tc)).join('');
-        return `<tr class="group-header"><td colspan="10"><span class="group-label">${esc(key)}</span></td></tr>${rows}`;
+        return `<tr class="group-header"><td colspan="11"><span class="group-label">${esc(key)}</span></td></tr>${rows}`;
       }).join('');
     } else {
       tbody.innerHTML = cases.map(tc => renderRow(tc)).join('');
@@ -567,6 +640,7 @@ const UI = (() => {
     editingId.value = '';
     fId.value = TCStore.nextId();
     setTypeValue('manual');
+    setPriorityValue(null);
     currentAttachments = [];
     renderAttachmentsList();
     openModal('New Test Case');
@@ -583,7 +657,30 @@ const UI = (() => {
     if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
   });
 
+  /* ── Priority picker ────────────────────────────────────── */
+  $('f-priority-picker').addEventListener('click', e => {
+    const btn = e.target.closest('.priority-btn');
+    if (!btn) return;
+    const raw = btn.dataset.val;
+    setPriorityValue(raw ? parseInt(raw, 10) : null);
+  });
+
   /* ── Auto-number steps ───────────────────────────────────── */
+  fSteps.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const start = fSteps.selectionStart;
+    const val   = fSteps.value;
+    const lineStart   = val.lastIndexOf('\n', start - 1) + 1;
+    const currentLine = val.slice(lineStart, start);
+    const match = currentLine.match(/^(\d+)[.)]\s+\S/);
+    if (!match) return;
+    e.preventDefault();
+    const insert = `\n${parseInt(match[1], 10) + 1}. `;
+    fSteps.value = val.slice(0, start) + insert + val.slice(fSteps.selectionEnd);
+    const newPos = start + insert.length;
+    fSteps.setSelectionRange(newPos, newPos);
+  });
+
   $('btn-autonumber').addEventListener('click', () => {
     const lines = fSteps.value.split('\n');
     let counter = 1;
@@ -631,11 +728,19 @@ const UI = (() => {
   });
 
   $('f-attachments-list').addEventListener('click', e => {
-    const btn = e.target.closest('.btn-remove-attachment');
-    if (!btn) return;
-    const idx = parseInt(btn.dataset.idx, 10);
-    currentAttachments.splice(idx, 1);
-    renderAttachmentsList();
+    const removeBtn = e.target.closest('.btn-remove-attachment');
+    if (removeBtn) {
+      const idx = parseInt(removeBtn.dataset.idx, 10);
+      currentAttachments.splice(idx, 1);
+      renderAttachmentsList();
+      return;
+    }
+    const previewBtn = e.target.closest('.btn-preview-att');
+    if (previewBtn) {
+      const idx = parseInt(previewBtn.dataset.idx, 10);
+      const att = currentAttachments[idx];
+      if (att) openPreview(att.name, att.data, att.type);
+    }
   });
 
   /* ── Suggest ─────────────────────────────────────────────── */
@@ -667,17 +772,16 @@ const UI = (() => {
       }
     }
 
-    const priorityVal = parseInt(fPriority.value, 10);
-
     TCStore.upsert({
       id:             recordId,
       title:          fTitle.value.trim(),
       steps:          fSteps.value.trim(),
       expectedResult: fExpected.value.trim(),
-      priority:       isNaN(priorityVal) || priorityVal < 1 ? null : priorityVal,
+      priority:       getPriorityValue(),
       type:           getTypeValue(),
       status:         fStatus.value,
       technology:     fTechnology.value.trim(),
+      testSuite:      $('f-test-suite').value.trim(),
       attachments:    currentAttachments,
       updatedAt:      new Date().toISOString(),
     });
@@ -697,26 +801,34 @@ const UI = (() => {
     const viewBtn    = e.target.closest('.btn-view');
     const editBtn    = e.target.closest('.btn-edit');
     const deleteBtn  = e.target.closest('.btn-delete');
-    const attachLink = e.target.closest('.attachment-link');
+    const attPreview = e.target.closest('.btn-att-preview');
+    const attDl      = e.target.closest('.btn-att-dl');
 
     if (viewBtn) {
       openView(viewBtn.dataset.id);
       return;
     }
 
-    if (attachLink) {
-      e.preventDefault();
-      const id  = attachLink.dataset.id;
-      const idx = parseInt(attachLink.dataset.idx, 10);
-      const tc  = TCStore.getAll().find(c => c.id === id);
+    if (attPreview) {
+      const tc  = TCStore.getAll().find(c => c.id === attPreview.dataset.id);
+      const idx = parseInt(attPreview.dataset.idx, 10);
+      if (!tc || !tc.attachments || !tc.attachments[idx]) return;
+      openPreview(tc.attachments[idx].name, tc.attachments[idx].data, tc.attachments[idx].type);
+      return;
+    }
+
+    if (attDl) {
+      const tc  = TCStore.getAll().find(c => c.id === attDl.dataset.id);
+      const idx = parseInt(attDl.dataset.idx, 10);
       if (!tc || !tc.attachments || !tc.attachments[idx]) return;
       const att = tc.attachments[idx];
       const a   = document.createElement('a');
-      a.href    = att.data;
+      a.href     = att.data;
       a.download = att.name;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      return;
     }
 
     if (editBtn) {
@@ -730,8 +842,9 @@ const UI = (() => {
       fSteps.value     = tc.steps;
       fExpected.value  = tc.expectedResult;
       fStatus.value    = tc.status;
-      fPriority.value   = tc.priority != null ? tc.priority : '';
+      setPriorityValue(tc.priority != null ? tc.priority : null);
       fTechnology.value = tc.technology || '';
+      $('f-test-suite').value = tc.testSuite || '';
       setTypeValue(tc.type);
       suggestMsg.textContent = '';
       currentAttachments = (tc.attachments || []).slice();
@@ -826,8 +939,16 @@ const UI = (() => {
     });
   });
 
-  /* ── Technology filter & group toggle ───────────────────────── */
+  /* ── Preview overlay close ───────────────────────────────── */
+  $('btn-preview-close').addEventListener('click', closePreview);
+  previewOverlay.addEventListener('click', e => { if (e.target === previewOverlay) closePreview(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !previewOverlay.classList.contains('hidden')) closePreview();
+  });
+
+  /* ── Technology / Test Suite filter & group toggle ──────────── */
   filterTechnology.addEventListener('change', render);
+  filterTestSuite.addEventListener('change', render);
 
   $('btn-group-tech').addEventListener('click', () => {
     groupByTech = !groupByTech;

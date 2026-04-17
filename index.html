@@ -59,13 +59,39 @@
           </div>
 
           <div class="form-row half">
-            <label for="f-priority">Priority</label>
-            <input id="f-priority" type="number" min="1" placeholder="e.g. 1" />
+            <label>Priority</label>
+            <div class="priority-picker" id="f-priority-picker">
+              <button type="button" class="priority-btn p1" data-val="1">P1</button>
+              <button type="button" class="priority-btn p2" data-val="2">P2</button>
+              <button type="button" class="priority-btn p3" data-val="3">P3</button>
+              <button type="button" class="priority-btn p4" data-val="4">P4</button>
+              <button type="button" class="priority-btn p5" data-val="5">P5</button>
+              <button type="button" class="priority-btn priority-clear" data-val="">—</button>
+            </div>
+            <input type="hidden" id="f-priority" />
           </div>
 
           <div class="form-row half">
             <label for="f-technology">Technology</label>
-            <input id="f-technology" type="text" placeholder="e.g. React, API, Mobile" />
+            <select id="f-technology">
+              <option value="">— None —</option>
+              <option value="EB">EB</option>
+              <option value="D2C">D2C</option>
+              <option value="Costco">Costco</option>
+              <option value="USAA">USAA</option>
+              <option value="Greystar">Greystar</option>
+              <option value="GoodDog">GoodDog</option>
+              <option value="UHC">UHC</option>
+              <option value="Web">Web</option>
+              <option value="Android">Android</option>
+              <option value="IOS">IOS</option>
+              <option value="Backend">Backend</option>
+            </select>
+          </div>
+
+          <div class="form-row full">
+            <label for="f-test-suite">Test Suite</label>
+            <input id="f-test-suite" type="text" placeholder="e.g. Smoke, Regression, Login Flow" />
           </div>
 
           <div class="form-row full">
@@ -156,6 +182,9 @@
     <select id="filter-technology">
       <option value="">All Technologies</option>
     </select>
+    <select id="filter-test-suite">
+      <option value="">All Suites</option>
+    </select>
     <button id="btn-group-tech" class="btn btn-secondary" title="Group rows by technology">&#9783; Group by Tech</button>
   </div>
 
@@ -171,6 +200,7 @@
           <th data-col="type" class="sortable">Type <span class="sort-icon">&#8597;</span></th>
           <th data-col="status" class="sortable">Status <span class="sort-icon">&#8597;</span></th>
           <th data-col="technology" class="sortable">Technology <span class="sort-icon">&#8597;</span></th>
+          <th data-col="testSuite" class="sortable">Test Suite <span class="sort-icon">&#8597;</span></th>
           <th>Attachments</th>
           <th>Details</th>
           <th>Actions</th>
@@ -216,6 +246,17 @@
       </div>
     </div>
   </details>
+
+  <!-- ─── Preview modal ───────────────────────────────────────── -->
+  <div id="preview-overlay" class="hidden" role="dialog" aria-modal="true" aria-label="File preview">
+    <div id="preview-modal">
+      <div class="modal-header">
+        <span id="preview-filename" class="preview-filename"></span>
+        <button id="btn-preview-close" class="btn-icon" aria-label="Close">&times;</button>
+      </div>
+      <div id="preview-body" class="preview-body"></div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
